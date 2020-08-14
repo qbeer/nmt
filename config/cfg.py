@@ -1,0 +1,3 @@
+MAX_LENGTH = 10
+SOS = 0
+EOS = 1
