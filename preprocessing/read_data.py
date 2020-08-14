@@ -1,11 +1,6 @@
 from .language import Lang
-import re
-import unicodedata
 from config.cfg import MAX_LENGTH
-
-eng_prefixes = ("i am ", "i m ", "he is", "he s ", "she is", "she s ",
-                "you are", "you re ", "we are", "we re ", "they are",
-                "they re ")
+from config.utils import preproc_single_sentence
 
 
 class ReadLanguages:
@@ -16,11 +11,7 @@ class ReadLanguages:
         self.reverse = reverse
 
     def _normalizeString(self, s):
-        s = ''.join(c for c in unicodedata.normalize('NFD', s))
-        s = s.lower().strip()
-        s = re.sub(r"([.!?])", r" \1", s)
-        s = re.sub(r"[\x00-\x2F\x3A-\x40\x5B-\x60\x7B-\x7F]+", r" ", s)
-        s = s.strip()
+        s = preproc_single_sentence(s)
         return s
 
     def _preprocess(self):

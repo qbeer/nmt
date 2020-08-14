@@ -12,16 +12,16 @@ class Seq2SeqTrainer:
                  decoder,
                  dataset,
                  teacher_forcing=False,
-                 teacher_forcing_ratio=0.5):
+                 teacher_forcing_ratio=0.5,
+                 attention=False):
         self.encoder = encoder
         self.decoder = decoder
         self.dataset = dataset
         self.teacher_forcing = teacher_forcing
         self.teacher_forcing_ratio = teacher_forcing_ratio
+        self.attention = attention
         if not self.teacher_forcing:
             self.teacher_forcing_ratio = -1
-
-        self.writer = SummaryWriter(comment='seq2seq')
 
     def _trainStep(self, input_tensor, output_tensor):
         loss = 0.0
@@ -51,13 +51,23 @@ class Seq2SeqTrainer:
 
         if use_teacher_forcing:
             for di in range(output_length):
-                decoder_output, hidden = self.decoder(decoder_input, hidden)
+                if self.attention:
+                    decoder_output, hidden, _ = self.decoder(
+                        decoder_input, hidden, encoder_outputs)
+                else:
+                    decoder_output, hidden = self.decoder(
+                        decoder_input, hidden)
                 decoder_input = output_tensor[di]  # teacher forcing
                 loss += self.criterion(decoder_output, output_tensor[di])
 
         else:
             for di in range(output_length):
-                decoder_output, hidden = self.decoder(decoder_input, hidden)
+                if self.attention:
+                    decoder_output, hidden, _ = self.decoder(
+                        decoder_input, hidden, encoder_outputs)
+                else:
+                    decoder_output, hidden = self.decoder(
+                        decoder_input, hidden)
                 _, index_of_max_prop = decoder_output.topk(1)
                 decoder_input = index_of_max_prop.squeeze().detach()
 
@@ -74,6 +84,11 @@ class Seq2SeqTrainer:
         return loss.item() / output_length
 
     def train(self, n_iters, learning_rate=1e-3):
+        comment = 'seq2seq'
+        if self.attention:
+            comment += '_attention'
+        self.writer = SummaryWriter(comment=comment)
+
         self.encoder_opt = torch.optim.Adam(self.encoder.parameters(),
                                             lr=learning_rate)
         self.decoder_opt = torch.optim.Adam(self.decoder.parameters(),
@@ -97,11 +112,15 @@ class Seq2SeqTrainer:
                 print('Neural translation : %s' % outp)
                 print('Original translation : %s' % orig_pair[1], end='\n\n')
 
-    def evaluate(self):
+    def evaluate(self, input_text=None):
         with torch.no_grad():
             pair_tensor, pair = self.dataset.get_random_pair(
                 return_original=True)
-            input_tensor, _ = pair_tensor
+            if input_text:
+                input_tensor = self.dataset.prepoc_single_example(input_text)
+                pair = input_text
+            else:
+                input_tensor, _ = pair_tensor
             input_length = input_tensor.size()[0]
             encoder_hidden = self.encoder.initHidden()
 
@@ -121,8 +140,13 @@ class Seq2SeqTrainer:
             decoded_words = []
 
             for _ in range(MAX_LENGTH):
-                decoder_output, decoder_hidden = self.decoder(
-                    decoder_input, decoder_hidden)
+                if self.attention:
+                    decoder_output, decoder_hidden, _ = self.decoder(
+                        decoder_input, decoder_hidden, encoder_outputs)
+                else:
+                    decoder_output, decoder_hidden = self.decoder(
+                        decoder_input, decoder_hidden)
+
                 _, topi = decoder_output.data.topk(1)
                 if topi.item() == EOS:
                     decoded_words.append('<EOS>')

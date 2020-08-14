@@ -1,6 +1,7 @@
 import torch
 import random
 from config.cfg import SOS, EOS
+from config.utils import preproc_single_sentence
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -33,3 +34,8 @@ class TrainingData:
         if return_original:
             return (random_pair_tensor, random_pair)
         return random_pair_tensor
+
+    def prepoc_single_example(self, sentence):
+        sentence = preproc_single_sentence(sentence)
+        tensor = self._tensorFromSentence(self.input_lang, sentence)
+        return tensor
